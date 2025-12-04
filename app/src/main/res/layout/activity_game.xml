@@ -15,6 +15,7 @@
         android:orientation="horizontal"
         android:padding="16dp"
         android:background="@color/background_light"
+        android:layout_marginTop="40dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
