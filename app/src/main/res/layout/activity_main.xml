@@ -41,13 +41,15 @@
             android:orientation="vertical"
             android:padding="24dp">
 
+            <!-- INPUT DE NOMBRE: Color blanco forzado -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilPlayerName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="@string/enter_name"
+                android:textColorHint="#FFFFFF"
+                app:hintTextColor="#FFFFFF"
                 app:boxBackgroundColor="@color/background"
-                app:hintTextColor="@color/text_secondary"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -59,14 +61,16 @@
                     android:inputType="textPersonName" />
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- INPUT DE CÓDIGO: Color blanco forzado -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilRoomCode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:hint="@string/enter_room_code"
+                android:textColorHint="#FFFFFF"
+                app:hintTextColor="#FFFFFF"
                 app:boxBackgroundColor="@color/background"
-                app:hintTextColor="@color/text_secondary"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText

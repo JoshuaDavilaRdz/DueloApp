@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import kotlin.random.Random
+import kotlinx.coroutines.delay
 
 class GameRepository {
 
@@ -16,39 +17,113 @@ class GameRepository {
     private val roomsRef = database.getReference("rooms")
     private val eventsRef = database.getReference("events")
 
-    private var eventListener: ValueEventListener? = null
+    private var childEventListener: ChildEventListener? = null
     private var currentRoomId: String? = null
 
     private val MAX_ROUNDS = 5
 
-    suspend fun joinRoom(code: String): String {
+    suspend fun joinRoom(code: String, playerName: String): String {
         return try {
-            // Buscar o crear sala
-            val snapshot = roomsRef.orderByChild("code").equalTo(code).get().await()
+            val normalizedCode = code.uppercase().trim()
+            val roomRef = roomsRef.child(normalizedCode)
+            val snapshot = roomRef.get().await()
 
-            val roomId = if (snapshot.exists()) {
-                // Sala existe
-                snapshot.children.first().key!!
+            if (snapshot.exists()) {
+                // Sala existe - verificar estado
+                val state = snapshot.child("state").value as? String
+                val currentPlayers = snapshot.child("players").value as? List<*>
+                val playersList = currentPlayers?.mapNotNull { it as? String }?.toMutableList() ?: mutableListOf()
+
+                // Si el juego ya terminó o hay 2 jugadores diferentes, reiniciar sala
+                if (state == "finished" || playersList.size >= 2) {
+                    // Reiniciar sala para nueva partida
+                    playersList.clear()
+                    playersList.add(playerName)
+
+                    roomRef.updateChildren(mapOf(
+                        "players" to playersList,
+                        "state" to "lobby",
+                        "score" to emptyMap<String, Int>(),
+                        "round" to 0
+                    )).await()
+
+                    // Limpiar eventos antiguos
+                    eventsRef.child(normalizedCode).removeValue().await()
+
+                    Log.d(TAG, "Room reset for new game: $normalizedCode")
+                } else {
+                    // Agregar jugador si no está ya
+                    if (!playersList.contains(playerName)) {
+                        playersList.add(playerName)
+                        roomRef.child("players").setValue(playersList).await()
+                    }
+                }
+
+                // Emitir evento de actualización de jugadores
+                createEvent(normalizedCode, "PLAYERS_UPDATE", mapOf("players" to playersList))
+
+                // Si hay 2 jugadores, iniciar countdown automáticamente
+                if (playersList.size >= 2) {
+                    startCountdown(normalizedCode)
+                }
+
+                Log.d(TAG, "Joined existing room: $normalizedCode, players: $playersList")
             } else {
                 // Crear nueva sala
-                val newRoomRef = roomsRef.push()
                 val roomData = mapOf(
-                    "code" to code,
+                    "code" to normalizedCode,
                     "state" to "lobby",
+                    "players" to listOf(playerName),
                     "score" to emptyMap<String, Int>(),
                     "round" to 0,
                     "maxRounds" to MAX_ROUNDS,
                     "createdAt" to ServerValue.TIMESTAMP
                 )
-                newRoomRef.setValue(roomData).await()
-                newRoomRef.key!!
+                roomRef.setValue(roomData).await()
+
+                // Emitir evento inicial de jugadores
+                createEvent(normalizedCode, "PLAYERS_UPDATE", mapOf("players" to listOf(playerName)))
+
+                Log.d(TAG, "Created new room: $normalizedCode")
             }
 
-            Log.d(TAG, "Joined room: $roomId")
-            roomId
+            normalizedCode
         } catch (e: Exception) {
             Log.e(TAG, "Error joining room", e)
             throw e
+        }
+    }
+
+    private suspend fun startCountdown(roomId: String) {
+        // Evitar múltiples countdowns simultáneos
+        val roomRef = roomsRef.child(roomId)
+        val countdownRef = roomRef.child("countdownStarted")
+
+        // Verificar si ya hay un countdown en progreso
+        val snapshot = countdownRef.get().await()
+        if (snapshot.value == true) {
+            Log.d(TAG, "Countdown already in progress for room: $roomId")
+            return
+        }
+
+        try {
+            // Marcar que el countdown ya empezó
+            countdownRef.setValue(true).await()
+            Log.d(TAG, "Starting countdown for room: $roomId")
+
+            for (count in 5 downTo 1) {
+                createEvent(roomId, "COUNTDOWN", mapOf("count" to count))
+                delay(1000)
+            }
+
+            // Iniciar juego después del countdown
+            startGame(roomId)
+
+            // Limpiar flag
+            countdownRef.setValue(false).await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in countdown", e)
+            countdownRef.setValue(false).await()
         }
     }
 
@@ -71,6 +146,9 @@ class GameRepository {
                 "round" to 1,
                 "maxRounds" to MAX_ROUNDS
             ))
+
+            // Dar un pequeño delay antes de generar el primer objetivo
+            delay(500)
 
             // Generar primer objetivo
             spawnTarget(roomId)
@@ -193,39 +271,39 @@ class GameRepository {
         currentRoomId = roomId
         val eventsRoomRef = eventsRef.child(roomId)
 
-        eventListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                // Obtener solo el último evento
-                val lastEvent = snapshot.children.lastOrNull()
+        // Usar ChildEventListener para detectar nuevos eventos
+        val listener = object : ChildEventListener {
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                try {
+                    val type = snapshot.child("type").value as? String ?: ""
+                    val payloadSnapshot = snapshot.child("payload")
+                    val payload = snapshotToMap(payloadSnapshot)
 
-                lastEvent?.let { eventSnapshot ->
-                    try {
-                        val type = eventSnapshot.child("type").value as? String ?: ""
-                        val payloadSnapshot = eventSnapshot.child("payload")
-                        val payload = snapshotToMap(payloadSnapshot)
-
-                        Log.d(TAG, "Event received: $type")
-                        trySend(GameEvent(type, payload)).isSuccess
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error processing event", e)
-                    }
+                    Log.d(TAG, "Event received (child added): $type")
+                    trySend(GameEvent(type, payload)).isSuccess
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing child event", e)
                 }
             }
 
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Firebase listener cancelled: ${error.message}")
+                Log.e(TAG, "Firebase child listener cancelled: ${error.message}")
                 close(error.toException())
             }
         }
 
-        eventsRoomRef.addValueEventListener(eventListener!!)
+        childEventListener = listener
+        eventsRoomRef.addChildEventListener(listener)
         Log.d(TAG, "Started observing events for room: $roomId")
 
         awaitClose {
-            eventListener?.let { eventsRoomRef.removeEventListener(it) }
-            eventListener = null
+            Log.d(TAG, "Closing event observation")
+            eventsRoomRef.removeEventListener(listener)
+            childEventListener = null
             currentRoomId = null
-            Log.d(TAG, "Stopped observing events")
         }
     }
 
@@ -246,13 +324,16 @@ class GameRepository {
     }
 
     fun stopObserving() {
-        currentRoomId?.let { roomId ->
-            eventListener?.let { listener ->
-                eventsRef.child(roomId).removeEventListener(listener)
+        try {
+            if (currentRoomId != null && childEventListener != null) {
+                eventsRef.child(currentRoomId!!).removeEventListener(childEventListener!!)
+                Log.d(TAG, "Stopped observing events")
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping observation: ${e.message}")
+        } finally {
+            childEventListener = null
+            currentRoomId = null
         }
-        eventListener = null
-        currentRoomId = null
-        Log.d(TAG, "Stopped observing")
     }
 }

@@ -48,8 +48,8 @@ class GameViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 _loading.value = true
-                val roomId = repository.joinRoom(code)
-                _roomState.value = RoomState(roomId = roomId, code = code)
+                val roomId = repository.joinRoom(code, playerName)
+                _roomState.value = RoomState(roomId = roomId, code = code, players = listOf(playerName))
                 Log.d(TAG, "Room joined: $roomId")
             } catch (e: Exception) {
                 _error.value = "Error al unirse a la sala: ${e.message}"
@@ -113,6 +113,8 @@ class GameViewModel : ViewModel() {
             "SPAWN" -> handleSpawn(event.payload)
             "SCORE" -> handleScore(event.payload)
             "END" -> handleEnd(event.payload)
+            "COUNTDOWN" -> handleCountdown(event.payload)
+            "PLAYERS_UPDATE" -> handlePlayersUpdate(event.payload)
         }
     }
 
@@ -195,6 +197,28 @@ class GameViewModel : ViewModel() {
         _currentSpawn.value = null
 
         Log.d(TAG, "Game ended - Champion: $champion, Final scores: $score")
+    }
+
+    private fun handleCountdown(payload: Map<String, Any>) {
+        val count = (payload["count"] as? Number)?.toInt() ?: 0
+
+        _roomState.value = _roomState.value?.copy(
+            countdown = count,
+            countdownActive = count > 0
+        )
+
+        Log.d(TAG, "Countdown: $count")
+    }
+
+    private fun handlePlayersUpdate(payload: Map<String, Any>) {
+        val playersAny = payload["players"] as? List<*>
+        val players = playersAny?.mapNotNull { it as? String } ?: emptyList()
+
+        _roomState.value = _roomState.value?.copy(
+            players = players
+        )
+
+        Log.d(TAG, "Players updated: $players")
     }
 
     override fun onCleared() {

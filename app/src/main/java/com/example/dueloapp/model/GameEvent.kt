@@ -33,3 +33,11 @@ data class StartData(
     val round: Int,
     val maxRounds: Int
 )
+
+data class CountdownData(
+    val count: Int
+)
+
+data class PlayersUpdateData(
+    val players: List<String>
+)
