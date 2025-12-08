@@ -74,7 +74,6 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:gravity="center">
-                <!-- Los scores se agregarán dinámicamente -->
             </LinearLayout>
 
             <TextView

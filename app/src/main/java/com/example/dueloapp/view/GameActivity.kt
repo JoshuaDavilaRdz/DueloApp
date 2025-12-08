@@ -64,7 +64,7 @@ class GameActivity : AppCompatActivity() {
             updateRoundInfo(roomState.round, roomState.maxRounds)
 
             if (roomState.gameEnded) {
-                // Pequeño delay antes de ir a resultados
+                // Pequeño delay antes de ir a resultados :v
                 handler.postDelayed({
                     navigateToResults()
                 }, 1000)

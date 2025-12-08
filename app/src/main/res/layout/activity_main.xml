@@ -61,7 +61,7 @@
                     android:inputType="textPersonName" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- INPUT DE CÓDIGO: Color blanco forzado -->
+            <!-- INPUT DE CÓDIGO: Color blanco forzado xd -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilRoomCode"
                 android:layout_width="match_parent"
@@ -91,6 +91,19 @@
                 android:textSize="16sp"
                 android:textStyle="bold"
                 app:backgroundTint="@color/primary"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnHistory"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginTop="12dp"
+                android:text="Ver Historial"
+                android:textSize="16sp"
+                android:textColor="@color/primary"
+                app:strokeColor="@color/primary"
+                app:strokeWidth="2dp"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 app:cornerRadius="12dp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

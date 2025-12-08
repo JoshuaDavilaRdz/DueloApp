@@ -3,6 +3,10 @@ package com.example.dueloapp.view
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -19,6 +23,15 @@ class GameCanvasView @JvmOverloads constructor(
 
     private var currentSpawn: SpawnData? = null
     private var onTargetHitListener: ((String) -> Unit)? = null
+
+    // Vibrator para feedback háptico
+    private val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        vibratorManager.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
 
     // Paints para dibujar
     private val targetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -149,6 +162,10 @@ class GameCanvasView @JvmOverloads constructor(
 
             if (distance <= r) {
                 // ¡Objetivo tocado!
+
+                // Vibración al tocar
+                triggerVibration()
+
                 onTargetHitListener?.invoke(spawn.spawnId)
                 createExplosion(cx, cy)
                 currentSpawn = null
@@ -159,6 +176,25 @@ class GameCanvasView @JvmOverloads constructor(
         }
 
         return super.onTouchEvent(event)
+    }
+
+    private fun triggerVibration() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Vibración moderna con efecto
+                val effect = VibrationEffect.createOneShot(
+                    50, // duración en ms
+                    VibrationEffect.DEFAULT_AMPLITUDE
+                )
+                vibrator.vibrate(effect)
+            } else {
+                // Vibración legacy para dispositivos antiguos
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(50)
+            }
+        } catch (e: Exception) {
+            // Ignorar si no hay vibrador o hay algún error
+        }
     }
 
     private fun createExplosion(cx: Float, cy: Float) {

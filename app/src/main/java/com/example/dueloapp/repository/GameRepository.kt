@@ -13,9 +13,14 @@ import kotlinx.coroutines.delay
 class GameRepository {
 
     private val TAG = "GameRepository"
+
+    // 1. Inicializamos la base de datos PRIMERO
     private val database = FirebaseDatabase.getInstance()
+
+    // 2. Luego definimos las referencias que dependen de 'database'
     private val roomsRef = database.getReference("rooms")
     private val eventsRef = database.getReference("events")
+    private val historyRef = database.getReference("history") // Nueva referencia para el historial
 
     private var childEventListener: ChildEventListener? = null
     private var currentRoomId: String? = null
@@ -95,11 +100,9 @@ class GameRepository {
     }
 
     private suspend fun startCountdown(roomId: String) {
-        // Evitar múltiples countdowns simultáneos
         val roomRef = roomsRef.child(roomId)
         val countdownRef = roomRef.child("countdownStarted")
 
-        // Verificar si ya hay un countdown en progreso
         val snapshot = countdownRef.get().await()
         if (snapshot.value == true) {
             Log.d(TAG, "Countdown already in progress for room: $roomId")
@@ -107,7 +110,6 @@ class GameRepository {
         }
 
         try {
-            // Marcar que el countdown ya empezó
             countdownRef.setValue(true).await()
             Log.d(TAG, "Starting countdown for room: $roomId")
 
@@ -116,10 +118,7 @@ class GameRepository {
                 delay(1000)
             }
 
-            // Iniciar juego después del countdown
             startGame(roomId)
-
-            // Limpiar flag
             countdownRef.setValue(false).await()
         } catch (e: Exception) {
             Log.e(TAG, "Error in countdown", e)
@@ -131,7 +130,6 @@ class GameRepository {
         return try {
             val roomRef = roomsRef.child(roomId)
 
-            // Inicializar juego
             val updates = mapOf(
                 "state" to "playing",
                 "round" to 1,
@@ -140,17 +138,13 @@ class GameRepository {
             )
             roomRef.updateChildren(updates).await()
 
-            // Crear evento START
             createEvent(roomId, "START", mapOf(
                 "score" to emptyMap<String, Int>(),
                 "round" to 1,
                 "maxRounds" to MAX_ROUNDS
             ))
 
-            // Dar un pequeño delay antes de generar el primer objetivo
             delay(500)
-
-            // Generar primer objetivo
             spawnTarget(roomId)
 
             Log.d(TAG, "Game started for room: $roomId")
@@ -166,7 +160,6 @@ class GameRepository {
             val roomRef = roomsRef.child(roomId)
             val snapshot = roomRef.get().await()
 
-            // Obtener estado actual
             val currentScore = snapshot.child("score").value as? Map<String, Any> ?: emptyMap()
             val mutableScore = currentScore.mapValues { (it.value as? Long)?.toInt() ?: 0 }.toMutableMap()
             val currentRound = (snapshot.child("round").value as? Long)?.toInt() ?: 1
@@ -186,7 +179,6 @@ class GameRepository {
                 spawnId = spawnId
             )
 
-            // Crear evento SCORE
             createEvent(roomId, "SCORE", mapOf(
                 "score" to mutableScore,
                 "winner" to playerName,
@@ -199,6 +191,14 @@ class GameRepository {
             if (currentRound >= maxRounds) {
                 val champion = mutableScore.maxByOrNull { it.value }?.key ?: ""
 
+                // Esta parte nos permite guardar el historial (|-/)
+                val currentState = snapshot.child("state").value as? String
+                if (currentState != "finished") {
+                    // Obtenemos el código de la sala para guardarlo en el historial
+                    val code = snapshot.child("code").value as? String ?: "???"
+                    saveGameHistory(code, champion, mutableScore, maxRounds)
+                }
+
                 createEvent(roomId, "END", mapOf(
                     "champion" to champion,
                     "score" to mutableScore,
@@ -208,7 +208,6 @@ class GameRepository {
 
                 roomRef.child("state").setValue("finished").await()
             } else {
-                // Siguiente ronda
                 val nextRound = currentRound + 1
                 roomRef.child("round").setValue(nextRound).await()
                 spawnTarget(roomId)
@@ -219,6 +218,63 @@ class GameRepository {
         } catch (e: Exception) {
             Log.e(TAG, "Error hitting target", e)
             throw e
+        }
+    }
+
+    private suspend fun saveGameHistory(roomCode: String, winner: String, scores: Map<String, Int>, rounds: Int) {
+        try {
+            val historyId = historyRef.push().key ?: return
+            val historyItem = GameHistory(
+                id = historyId,
+                roomCode = roomCode,
+                timestamp = System.currentTimeMillis(),
+                winner = winner,
+                scores = scores,
+                roundsPlayed = rounds
+            )
+            historyRef.child(historyId).setValue(historyItem).await()
+            Log.d(TAG, "Game history saved: $historyId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving history", e)
+        }
+    }
+    //Ver historial más chido xd
+    suspend fun getGameHistory(): List<GameHistory> {
+        return try {
+            Log.d(TAG, "--- Iniciando lectura de historial ---")
+
+            // 1. Obtiene los datos
+            val snapshot = historyRef.orderByChild("timestamp").limitToLast(20).get().await()
+            Log.d(TAG, "Snapshot recibido. Cantidad de hijos: ${snapshot.childrenCount}")
+
+            val historyList = mutableListOf<GameHistory>()
+
+            // 2. Intenta convertir cada hijo
+            for (child in snapshot.children) {
+                try {
+                    // Imprimimos el JSON crudo para ver qué llega
+                    Log.d(TAG, "Procesando hijo: ${child.key}, Valor: ${child.value}")
+
+                    val item = child.getValue(GameHistory::class.java)
+
+                    if (item != null) {
+                        historyList.add(item)
+                        Log.d(TAG, "-> Item convertido con éxito: ${item.winner}")
+                    } else {
+                        Log.e(TAG, "-> ERROR: El item es NULL tras convertir. Revisa GameHistory.kt")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "-> ERROR al convertir item individual: ${e.message}")
+                }
+            }
+
+            Log.d(TAG, "--- Lectura finalizada. Items válidos: ${historyList.size} ---")
+
+            // Invertimos para ver el más reciente arriba siempre
+            historyList.reversed()
+        } catch (e: Exception) {
+            Log.e(TAG, "ERROR CRÍTICO leyendo historial", e)
+            emptyList()
         }
     }
 
@@ -271,7 +327,6 @@ class GameRepository {
         currentRoomId = roomId
         val eventsRoomRef = eventsRef.child(roomId)
 
-        // Usar ChildEventListener para detectar nuevos eventos
         val listener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
                 try {

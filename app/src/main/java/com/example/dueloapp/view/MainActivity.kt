@@ -41,12 +41,17 @@ class MainActivity : AppCompatActivity() {
             viewModel.playerName = playerName
             viewModel.joinRoom(roomCode)
         }
+
+        binding.btnHistory.setOnClickListener {
+            android.util.Log.d("DEBUG_GUI", "Botón Historial presionado") // Chismoso para el Logcat :v
+            val intent = Intent(this, HistoryActivity::class.java)
+            startActivity(intent)
+        }
     }
 
     private fun setupObservers() {
         viewModel.roomState.observe(this) { roomState ->
             if (roomState.roomId.isNotEmpty()) {
-                // Navegar a LobbyActivity
                 val intent = Intent(this, LobbyActivity::class.java)
                 intent.putExtra("PLAYER_NAME", viewModel.playerName)
                 intent.putExtra("ROOM_CODE", roomState.code)

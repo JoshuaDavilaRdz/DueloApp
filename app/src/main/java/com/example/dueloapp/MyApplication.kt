@@ -12,7 +12,7 @@ class MyApplication : Application() {
         // Inicializar Firebase
         FirebaseApp.initializeApp(this)
 
-        // Habilitar persistencia offline (opcional pero recomendado)
+        // Habilitar persistencia offline 
         FirebaseDatabase.getInstance().setPersistenceEnabled(true)
 
         android.util.Log.d("MyApplication", "Firebase initialized successfully")

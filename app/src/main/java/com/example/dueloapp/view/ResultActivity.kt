@@ -47,7 +47,7 @@ class ResultActivity : AppCompatActivity() {
         setupObservers()
         setupListeners()
 
-        // Si no tenemos datos del juego terminado, observar eventos
+        // Si no tenemos datos del juego terminado, observa eventos
         if (viewModel.gameEnd.value == null) {
             viewModel.observeGameEvents()
         }
@@ -100,7 +100,7 @@ class ResultActivity : AppCompatActivity() {
         // Limpiar layout de scores anteriores
         binding.layoutScores.removeAllViews()
 
-        // Ordenar jugadores por puntuación (descendente)
+        // Ordenar jugadores por puntuación (orden descendente)
         val sortedScores = scores.entries.sortedByDescending { it.value }
 
         // Agregar scores dinámicamente

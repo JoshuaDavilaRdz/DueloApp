@@ -48,7 +48,7 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.0")
 
-    // Firebase BOM (Bill of Materials) - maneja todas las versiones
+    // Firebase BOM (Bill of Materials) - maneja todas las versiones (esto si es de chat yipiti pq teniamos errores :c)
     implementation(platform("com.google.firebase:firebase-bom:33.6.0"))
 
     // Firebase productos
